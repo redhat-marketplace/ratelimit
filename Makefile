@@ -40,7 +40,7 @@ bootstrap_redis_tls: redis.conf redis-per-second.conf
 	cat key.pem cert.pem > private.pem
 	sudo cp cert.pem /usr/local/share/ca-certificates/redis-stunnel.crt
 	chmod 640 key.pem cert.pem private.pem
-	sudo update-ca-certificates
+	#sudo update-ca-certificates - not needed with the RedisTlsCACerts feature
 	sudo stunnel redis.conf
 	sudo stunnel redis-per-second.conf
 .PHONY: docs_format

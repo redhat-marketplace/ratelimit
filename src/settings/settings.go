@@ -3,7 +3,8 @@ package settings
 import (
 	"crypto/tls"
 	"time"
-
+    
+    "github.com/envoyproxy/ratelimit/src/utils"
 	"github.com/kelseyhightower/envconfig"
 	"google.golang.org/grpc"
 )
@@ -58,6 +59,8 @@ type Settings struct {
 	RedisTls        bool   `envconfig:"REDIS_TLS" default:"false"`
 	// TODO: Make this setting configurable out of the box instead of having to provide it through code.
 	RedisTlsConfig *tls.Config
+	// Custom logic to allow CA Certs to be specified
+	RedisTlsCACerts string `envconfig:"REDIS_TLS_CA_CERTS" default:""`
 
 	// RedisPipelineWindow sets the duration after which internal pipelines will be flushed.
 	// If window is zero then implicit pipelining will be disabled. Radix use 150us for the
@@ -100,6 +103,13 @@ func NewSettings() Settings {
 	err := envconfig.Process("", &s)
 	if err != nil {
 		panic(err)
+	}
+	
+	if (s.RedisTlsCACerts != "") {
+		s.RedisTlsConfig, err = utils.GenerateTlsConfig(s.RedisTlsCACerts)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	return s
