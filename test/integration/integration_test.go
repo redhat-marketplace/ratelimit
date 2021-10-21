@@ -16,6 +16,7 @@ import (
 	"github.com/envoyproxy/ratelimit/src/memcached"
 	"github.com/envoyproxy/ratelimit/src/service_cmd/runner"
 	"github.com/envoyproxy/ratelimit/src/settings"
+	"github.com/envoyproxy/ratelimit/src/utils"
 	"github.com/envoyproxy/ratelimit/test/common"
 	"github.com/golang/protobuf/ptypes/duration"
 	"github.com/kelseyhightower/envconfig"
@@ -233,9 +234,35 @@ func TestMultiNodeMemcache(t *testing.T) {
 	})
 }
 
+func TestTlsConfigFailure(t *testing.T) {
+	s := makeSimpleRedisSettings(16381, 16382, false, 0)
+	s.RedisTlsConfig = nil
+	s.RedisAuth = "password123"
+	s.RedisTls = true
+	s.RedisPerSecondAuth = "password123"
+	s.RedisPerSecondTls = true
+	
+	enable_local_cache := s.LocalCacheSizeInBytes > 0
+	
+	// HACK: Wait for the server to come up. Make a hook that we can wait on
+	common.WaitForTcpPort(context.Background(), s.GrpcPort, 1*time.Second)
+
+	assert := assert.New(t)
+	conn, err := grpc.Dial(fmt.Sprintf("localhost:%v", s.GrpcPort), grpc.WithInsecure())
+	assert.NoError(err)
+	defer conn.Close()
+	c := pb.NewRateLimitServiceClient(conn)
+
+	// Assert this fails because of missing TLS CA Config Definition and the test Redis certs are self-signed
+	_, err = c.ShouldRateLimit(
+		context.Background(),
+		common.NewRateLimitRequest("reload", [][][2]string{{{getCacheKey("block", enable_local_cache), "foo"}}}, 1))
+	assert.EqualError(err, "rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing dial tcp 127.0.0.1:8083: connect: connection refused\"")
+}
+
 func testBasicConfigAuthTLS(perSecond bool, local_cache_size int) func(*testing.T) {
 	s := makeSimpleRedisSettings(16381, 16382, perSecond, local_cache_size)
-	s.RedisTlsConfig = nil
+	s.RedisTlsConfig, _ = utils.GenerateTlsConfig("/usr/local/share/ca-certificates/redis-stunnel.crt")
 	s.RedisAuth = "password123"
 	s.RedisTls = true
 	s.RedisPerSecondAuth = "password123"
