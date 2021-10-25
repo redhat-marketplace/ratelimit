@@ -1,8 +1,13 @@
 package utils
 
 import (
+	"crypto/tls"
+	"crypto/x509"
+	"io/ioutil"
+
 	pb "github.com/envoyproxy/go-control-plane/envoy/service/ratelimit/v3"
 	"github.com/golang/protobuf/ptypes/duration"
+	logger "github.com/sirupsen/logrus"
 )
 
 // Interface for a time source.
@@ -40,4 +45,28 @@ func Max(a uint32, b uint32) uint32 {
 		return a
 	}
 	return b
+}
+
+func GenerateTlsConfig(redisTlsCACerts string) (*tls.Config, error) {
+	// Get the SystemCertPool, continue with an empty pool on error
+	rootCAs, _ := x509.SystemCertPool()
+	if rootCAs == nil {
+		rootCAs = x509.NewCertPool()
+	}
+
+	// Read in the cert file
+	certs, err := ioutil.ReadFile(redisTlsCACerts)
+	if err != nil {
+		return nil, err
+	}
+
+	// Append our cert to the system pool
+	if ok := rootCAs.AppendCertsFromPEM(certs); !ok {
+		logger.Warnf("No certs appended, using system certs only")
+	}
+
+	// Trust the augmented cert pool in our client
+	return &tls.Config{
+		RootCAs: rootCAs,
+	}, nil
 }
